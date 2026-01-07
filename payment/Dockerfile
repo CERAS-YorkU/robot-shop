@@ -15,5 +15,5 @@ COPY *.py /app/
 COPY payment.ini /app/
 
 #CMD ["python", "payment.py"]
-CMD ["uwsgi", "--ini", "payment.ini"]
+CMD ["opentelemetry-instrument", "--service_name", "payment", "--exporter_otlp_endpoint", "http://otel-collector:4317", "uwsgi", "--ini", "payment.ini"]
 

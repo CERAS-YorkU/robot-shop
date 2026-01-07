@@ -11,6 +11,7 @@ COPY package.json /opt/server/
 RUN npm install
 
 COPY server.js /opt/server/
+COPY tracing.js /opt/server/
 
-CMD ["node", "server.js"]
+CMD ["node", "--require", "./tracing.js", "server.js"]
 

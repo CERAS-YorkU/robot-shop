@@ -1,8 +1,8 @@
 # Registry and repository for Docker images
-# Default is docker/robotshop/image:latest
+# Updated to use custom images with OpenTelemetry
 image:
-  repo: robotshop
-  version: latest
+  repo: gihong96
+  version: 0.1
   pullPolicy: IfNotPresent
 
 # EUM configuration
@@ -55,7 +55,7 @@ ratings: {}
 
 redis:
   # Storage class to use with redis statefulset.
-  storageClassName: standard
+  storageClassName: local-path
 
 shipping: {}
 
