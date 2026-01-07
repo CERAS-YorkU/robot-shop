@@ -1,0 +1,29 @@
+apiVersion: jaegertracing.io/v1
+kind: Jaeger
+metadata:
+  name: jaeger
+  namespace: {{ .Release.Namespace }}
+spec:
+  strategy: allInOne
+  allInOne:
+    image: jaegertracing/all-in-one:1.54
+    options:
+      log-level: info
+      collector:
+        otlp:
+          enabled: true
+          grpc:
+            host-port: 0.0.0.0:4317
+          http:
+            host-port: 0.0.0.0:4318
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 200m
+        memory: 256Mi
+  ingress:
+    enabled: false
+  storage:
+    type: memory

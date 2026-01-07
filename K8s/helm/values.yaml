@@ -3,7 +3,7 @@
 image:
   repo: gihong96
   version: 0.1
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 # EUM configuration
 # Provide your key and set the endpoint
