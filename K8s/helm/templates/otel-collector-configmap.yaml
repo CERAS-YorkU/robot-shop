@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  labels:
+    app: opentelemetry-collector
+data:
+  otel-collector-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+      # MySQL metrics receiver
+      mysql:
+        endpoint: mysql:3306
+        username: shipping
+        password: secret
+        collection_interval: 30s
+
+      # MongoDB metrics receiver
+      mongodb:
+        hosts:
+          - endpoint: mongodb:27017
+        collection_interval: 30s
+
+    processors:
+      batch:
+        timeout: 1s
+        send_batch_size: 1024
+      
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 512
+
+    exporters:
+      otlp:
+        endpoint: jaeger:4317
+        tls:
+          insecure: true
+      
+      logging:
+        loglevel: info
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlp, logging]
+
+        metrics:
+          receivers: [otlp, mysql, mongodb]
+          processors: [memory_limiter, batch]
+          exporters: [logging]
+        
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [logging]

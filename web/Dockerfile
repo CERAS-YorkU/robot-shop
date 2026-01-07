@@ -3,7 +3,7 @@ ARG KEY
 
 WORKDIR /instana
 
-RUN apk add --update --no-cache wget
+RUN apk add --update --no-cache wget unzip
 
 ENV ARTI_PATH='artifact-public.instana.io/artifactory/shared/com/instana/nginx_tracing/'
 
@@ -20,7 +20,6 @@ RUN if [ -n "$KEY" ]; then \
     touch dummy.so; \
     fi
 
-
 FROM nginx:1.21.6
 
 EXPOSE 8080
@@ -31,13 +30,16 @@ ENV CATALOGUE_HOST=catalogue \
     SHIPPING_HOST=shipping \
     PAYMENT_HOST=payment \
     RATINGS_HOST=ratings \
-    INSTANA_SERVICE_NAME=nginx-web
+    INSTANA_SERVICE_NAME=nginx-web \
+    OTEL_SERVICE_NAME=web \
+    OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 
-# Instana tracing
+# Instana tracing (legacy)
 COPY --from=build /instana/*.so /tmp/
 
 COPY entrypoint.sh /root/
 ENTRYPOINT ["/root/entrypoint.sh"]
 
 COPY default.conf.template /etc/nginx/conf.d/default.conf.template
+COPY opentelemetry_module.conf /opt/opentelemetry/
 COPY static /usr/share/nginx/html

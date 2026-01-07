@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,11 +10,17 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/instana/go-sensor"
 	ot "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/streadway/amqp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	"go.opentelemetry.io/otel/bridge/opentracing"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 const (
@@ -164,15 +171,64 @@ func processSale(parentSpan ot.Span) {
 	time.Sleep(time.Duration(42+rand.Int63n(42)) * time.Millisecond)
 }
 
+func initTracer() func() {
+	ctx := context.Background()
+
+	// Get OTLP endpoint from environment or use default
+	otlpEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if otlpEndpoint == "" {
+		otlpEndpoint = "otel-collector:4317"
+	}
+
+	// Create OTLP exporter
+	exporter, err := otlptracegrpc.New(ctx,
+		otlptracegrpc.WithEndpoint(otlpEndpoint),
+		otlptracegrpc.WithInsecure(),
+	)
+	if err != nil {
+		log.Fatalf("Failed to create OTLP exporter: %v", err)
+	}
+
+	// Create resource
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceName(Service),
+		),
+	)
+	if err != nil {
+		log.Fatalf("Failed to create resource: %v", err)
+	}
+
+	// Create tracer provider
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(res),
+	)
+	otel.SetTracerProvider(tp)
+
+	// Set up propagator for context propagation
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
+
+	// Create OpenTracing bridge
+	bridgeTracer, _ := opentracing.NewTracerPair(tp.Tracer(Service))
+	ot.SetGlobalTracer(bridgeTracer)
+
+	return func() {
+		if err := tp.Shutdown(ctx); err != nil {
+			log.Printf("Error shutting down tracer provider: %v", err)
+		}
+	}
+}
+
 func main() {
 	rand.Seed(time.Now().Unix())
 
-	// Instana tracing
-	ot.InitGlobalTracer(instana.NewTracerWithOptions(&instana.Options{
-		Service:           Service,
-		LogLevel:          instana.Info,
-		EnableAutoProfile: true,
-	}))
+	// OpenTelemetry tracing with OpenTracing bridge
+	shutdown := initTracer()
+	defer shutdown()
 
 	// Init amqpUri
 	// get host from environment
