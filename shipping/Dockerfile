@@ -25,6 +25,7 @@ ENV CART_ENDPOINT=cart:8080
 ENV DB_HOST=mysql
 ENV OTEL_SERVICE_NAME=shipping
 ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+ENV OTEL_LOGS_EXPORTER=none
 
 # Download OpenTelemetry Java agent
 ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar /opt/shipping/opentelemetry-javaagent.jar
