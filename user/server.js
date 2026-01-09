@@ -52,6 +52,15 @@ app.use((req, res, next) => {
     let span = instana.currentSpan();
     span.annotate('custom.sdk.tags.datacenter', dcs[Math.floor(Math.random() * dcs.length)]);
 
+    // Capture anomaly headers for labeled dataset generation
+    const anomalyHeaders = ['x-anomaly-type', 'x-anomaly-label', 'x-anomaly-root-cause', 'x-anomaly-msg'];
+    anomalyHeaders.forEach(header => {
+        const value = req.headers[header];
+        if (value) {
+            span.annotate(`http.request.header.${header}`, value);
+        }
+    });
+
     next();
 });
 

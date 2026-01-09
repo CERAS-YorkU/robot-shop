@@ -21,8 +21,14 @@ spec:
       - name: web
         image: {{ .Values.image.repo }}/robot-shop-web:{{ .Values.image.version }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
-        {{- if .Values.eum.key }}
         env:
+        # OpenTelemetry Configuration
+        - name: OTEL_SERVICE_NAME
+          value: "web"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://otel-collector:4317"
+        {{- if .Values.eum.key }}
+        # Instana EUM (optional, for browser-side tracing)
         - name: INSTANA_EUM_KEY
           value: {{ .Values.eum.key }}
         - name: INSTANA_EUM_REPORTING_URL

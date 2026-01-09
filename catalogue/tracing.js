@@ -3,6 +3,8 @@ const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumenta
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-grpc');
 const { Resource } = require('@opentelemetry/resources');
 const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
+const { AsyncLocalStorageContextManager } = require('@opentelemetry/context-async-hooks');
+const { W3CTraceContextPropagator } = require('@opentelemetry/core');
 
 // Configure the OTLP exporter to send traces to the collector
 const traceExporter = new OTLPTraceExporter({
@@ -15,7 +17,32 @@ const sdk = new NodeSDK({
     [SemanticResourceAttributes.SERVICE_NAME]: 'catalogue',
   }),
   traceExporter,
-  instrumentations: [getNodeAutoInstrumentations()],
+  // Context manager is critical for maintaining parent-child span relationships
+  contextManager: new AsyncLocalStorageContextManager(),
+  // W3C Trace Context propagator ensures trace context is propagated across services
+  textMapPropagator: new W3CTraceContextPropagator(),
+  instrumentations: [
+    getNodeAutoInstrumentations({
+      '@opentelemetry/instrumentation-http': {
+        requestHook: (span, request) => {
+          // Capture anomaly label headers for labeled dataset generation
+          const headers = request.headers || {};
+          if (headers['x-anomaly-type']) {
+            span.setAttribute('http.request.header.x-anomaly-type', headers['x-anomaly-type']);
+          }
+          if (headers['x-anomaly-label']) {
+            span.setAttribute('http.request.header.x-anomaly-label', headers['x-anomaly-label']);
+          }
+          if (headers['x-anomaly-root-cause']) {
+            span.setAttribute('http.request.header.x-anomaly-root-cause', headers['x-anomaly-root-cause']);
+          }
+          if (headers['x-anomaly-msg']) {
+            span.setAttribute('http.request.header.x-anomaly-msg', headers['x-anomaly-msg']);
+          }
+        },
+      },
+    }),
+  ],
 });
 
 // Start the SDK

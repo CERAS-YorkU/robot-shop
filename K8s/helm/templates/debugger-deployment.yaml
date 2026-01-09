@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: debug-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: debug
+  template:
+    metadata:
+      labels:
+        app: debug
+    spec:
+      restartPolicy: Always
+      containers:
+      - name: debug
+        image: busybox:1.36
+        command: ["/bin/sh", "-lc", "sleep 36000"]
+        volumeMounts:
+        - name: otel-logs
+          mountPath: /mnt/otel-logs
+      volumes:
+      - name: otel-logs
+        persistentVolumeClaim:
+          claimName: otel-logs-pvc

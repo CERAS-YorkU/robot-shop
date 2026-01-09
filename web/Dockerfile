@@ -1,26 +1,62 @@
-FROM alpine AS build
-ARG KEY
+FROM alpine:3.18 AS otel-build
 
-WORKDIR /instana
+WORKDIR /build
 
-RUN apk add --update --no-cache wget unzip
+RUN PATH="${PATH}:/sbin"
+# Install build dependencies
+RUN apk add --update --no-cache \
+    git \
+    cmake \
+    make \
+    g++ \
+    gcc \
+    pcre-dev \
+    zlib-dev \
+    linux-headers \
+    curl-dev \
+    protobuf-dev \
+    grpc-dev \
+    c-ares-dev \
+    re2-dev
 
-ENV ARTI_PATH='artifact-public.instana.io/artifactory/shared/com/instana/nginx_tracing/'
+# Clone and build nginx-otel module
+ENV NGINX_VERSION=1.26.0
+ENV OTEL_CPP_VERSION=1.9.1
 
-RUN if [ -n "$KEY" ]; then \
-    sensor_version=$(wget -O- "https://_:${KEY}@${ARTI_PATH}" 2>&1 | \
-      egrep -o "href=\"([0-9]+\.){2}[0-9]+/" | cut -d'"' -f2 | sort -V | tail -n1 | tr -d /); \
-    echo "Downloading sensor version ${sensor_version} for Nginx version 1.21.6" ; \
-    $(wget -O instana.zip \
-      "https://_:${KEY}@${ARTI_PATH}/${sensor_version}/linux-amd64-glibc-nginx-1.21.6.zip") && \
-    unzip instana.zip && \
-    mv glibc-libinstana_sensor.so libinstana_sensor.so && \
-    mv glibc-nginx-1.21.6-ngx_http_ot_module.so ngx_http_opentracing_module.so; \
-    else echo "KEY not provided. Not adding tracing"; \
-    touch dummy.so; \
-    fi
+# Download nginx source for building the module
+RUN wget http://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz && \
+    tar -xzf nginx-${NGINX_VERSION}.tar.gz
 
-FROM nginx:1.21.6
+# Clone nginx-otel
+RUN git clone --depth 1 --branch v0.1.2 https://github.com/nginxinc/nginx-otel.git
+
+# Download and build opentelemetry-cpp
+RUN git clone --depth 1 --branch v${OTEL_CPP_VERSION} https://github.com/open-telemetry/opentelemetry-cpp.git && \
+    cd opentelemetry-cpp && \
+    mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/opt/otel-cpp \
+          -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+          -DWITH_OTLP_GRPC=ON \
+          -DWITH_OTLP_HTTP=OFF \
+          -DBUILD_TESTING=OFF \
+          -DWITH_EXAMPLES=OFF \
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+          .. && \
+    make -j$(nproc) && \
+    make install
+
+# Build nginx-otel module
+RUN cd /build/nginx-${NGINX_VERSION} && \
+    ./configure \
+        --with-compat \
+        --add-dynamic-module=../nginx-otel \
+        --with-cc-opt="-I/opt/otel-cpp/include" \
+        --with-ld-opt="-L/opt/otel-cpp/lib" && \
+    make modules && \
+    cp objs/ngx_otel_module.so /build/
+
+FROM nginx:1.26.0-alpine
 
 EXPOSE 8080
 
@@ -30,14 +66,27 @@ ENV CATALOGUE_HOST=catalogue \
     SHIPPING_HOST=shipping \
     PAYMENT_HOST=payment \
     RATINGS_HOST=ratings \
-    INSTANA_SERVICE_NAME=nginx-web \
     OTEL_SERVICE_NAME=web \
-    OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
 
-# Instana tracing (legacy)
-COPY --from=build /instana/*.so /tmp/
+# Install runtime dependencies
+RUN apk add --no-cache \
+    libstdc++ \
+    libgcc \
+    grpc \
+    protobuf \
+    c-ares \
+    re2
+
+# Copy nginx-otel module and OpenTelemetry libraries from build stage
+COPY --from=otel-build /build/ngx_otel_module.so /usr/lib/nginx/modules/ngx_otel_module.so
+COPY --from=otel-build /opt/otel-cpp/lib/*.so* /usr/local/lib/
+
+# Update library cache
+RUN ldconfig /usr/local/lib
 
 COPY entrypoint.sh /root/
+RUN chmod +x /root/entrypoint.sh
 ENTRYPOINT ["/root/entrypoint.sh"]
 
 COPY default.conf.template /etc/nginx/conf.d/default.conf.template

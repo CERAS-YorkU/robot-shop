@@ -1,7 +1,4 @@
-# Instana tracing
-opentracing_load_tracer /usr/local/lib/libinstana_sensor.so /etc/instana-config.json;
-opentracing_propagate_context;
-
+# OpenTelemetry tracing with W3C Trace Context propagation
 server {
     listen       8080;
     server_name  localhost;
@@ -58,26 +55,81 @@ server {
     #}
 
     location /api/catalogue/ {
+        # OpenTelemetry automatically propagates W3C Trace Context (traceparent, tracestate)
+        # Propagate all request headers including trace context
+        proxy_pass_request_headers on;
+
+        # Propagate anomaly label headers for labeled dataset generation
+        proxy_set_header x-anomaly-type $http_x_anomaly_type;
+        proxy_set_header x-anomaly-label $http_x_anomaly_label;
+        proxy_set_header x-anomaly-root-cause $http_x_anomaly_root_cause;
+        proxy_set_header x-anomaly-msg $http_x_anomaly_msg;
+
         proxy_pass http://${CATALOGUE_HOST}:8080/;
     }
 
     location /api/user/ {
+        # OpenTelemetry automatically propagates W3C Trace Context (traceparent, tracestate)
+        proxy_pass_request_headers on;
+
+        # Propagate anomaly label headers for labeled dataset generation
+        proxy_set_header x-anomaly-type $http_x_anomaly_type;
+        proxy_set_header x-anomaly-label $http_x_anomaly_label;
+        proxy_set_header x-anomaly-root-cause $http_x_anomaly_root_cause;
+        proxy_set_header x-anomaly-msg $http_x_anomaly_msg;
+
         proxy_pass http://${USER_HOST}:8080/;
     }
 
     location /api/cart/ {
+        # OpenTelemetry automatically propagates W3C Trace Context (traceparent, tracestate)
+        proxy_pass_request_headers on;
+
+        # Propagate anomaly label headers for labeled dataset generation
+        proxy_set_header x-anomaly-type $http_x_anomaly_type;
+        proxy_set_header x-anomaly-label $http_x_anomaly_label;
+        proxy_set_header x-anomaly-root-cause $http_x_anomaly_root_cause;
+        proxy_set_header x-anomaly-msg $http_x_anomaly_msg;
+
         proxy_pass http://${CART_HOST}:8080/;
     }
 
     location /api/shipping/ {
+        # OpenTelemetry automatically propagates W3C Trace Context (traceparent, tracestate)
+        proxy_pass_request_headers on;
+
+        # Propagate anomaly label headers for labeled dataset generation
+        proxy_set_header x-anomaly-type $http_x_anomaly_type;
+        proxy_set_header x-anomaly-label $http_x_anomaly_label;
+        proxy_set_header x-anomaly-root-cause $http_x_anomaly_root_cause;
+        proxy_set_header x-anomaly-msg $http_x_anomaly_msg;
+
         proxy_pass http://${SHIPPING_HOST}:8080/;
     }
 
     location /api/payment/ {
+        # OpenTelemetry automatically propagates W3C Trace Context (traceparent, tracestate)
+        proxy_pass_request_headers on;
+
+        # Propagate anomaly label headers for labeled dataset generation
+        proxy_set_header x-anomaly-type $http_x_anomaly_type;
+        proxy_set_header x-anomaly-label $http_x_anomaly_label;
+        proxy_set_header x-anomaly-root-cause $http_x_anomaly_root_cause;
+        proxy_set_header x-anomaly-msg $http_x_anomaly_msg;
+
         proxy_pass http://${PAYMENT_HOST}:8080/;
     }
 
     location /api/ratings/ {
+        # OpenTelemetry automatically propagates W3C Trace Context (traceparent, tracestate)
+        proxy_pass_request_headers on;
+
+        # Propagate anomaly label headers for labeled dataset generation
+        proxy_set_header x-anomaly-type $http_x_anomaly_type;
+        proxy_set_header x-anomaly-label $http_x_anomaly_label;
+        proxy_set_header x-anomaly-root-cause $http_x_anomaly_root_cause;
+        proxy_set_header x-anomaly-msg $http_x_anomaly_msg;
+
         proxy_pass http://${RATINGS_HOST}:80/;
     }
 
