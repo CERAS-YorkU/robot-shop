@@ -26,38 +26,146 @@ data:
         hosts:
           - endpoint: mongodb:27017
         collection_interval: 30s
+        tls:
+          insecure: true
+          insecure_skip_verify: true
 
     processors:
       batch:
         timeout: 1s
         send_batch_size: 1024
-      
+
       memory_limiter:
         check_interval: 1s
         limit_mib: 512
+
+      # Filter processor to exclude unwanted traces and metrics
+      filter:
+        traces:
+          span:
+            # Exclude health check endpoints
+            - 'attributes["http.target"] == "/health"'
+            - 'attributes["http.route"] == "/health"'
+            - 'attributes["url.path"] == "/health"'
+            # Exclude internal monitoring services
+            - 'resource.attributes["service.name"] == "jaeger"'
+            - 'resource.attributes["service.name"] == "otel-collector"'
+            - 'resource.attributes["service.name"] == "debugger"'
+            - 'IsMatch(resource.attributes["service.name"], "jaeger.*")'
+            - 'IsMatch(resource.attributes["service.name"], "otel.*")'
+            # Exclude Jaeger internal operations
+            - 'IsMatch(name, "jaeger.*")'
+
+        metrics:
+          metric:
+            # Exclude metrics from non-MSA services
+            - 'resource.attributes["service.name"] == "jaeger"'
+            - 'resource.attributes["service.name"] == "otel-collector"'
+            - 'resource.attributes["service.name"] == "debugger"'
+            - 'IsMatch(resource.attributes["service.name"], "jaeger.*")'
+            - 'IsMatch(resource.attributes["service.name"], "otel.*")'
+
+        logs:
+          log_record:
+            # Exclude logs from non-MSA services
+            - 'resource.attributes["service.name"] == "jaeger"'
+            - 'resource.attributes["service.name"] == "otel-collector"'
+            - 'resource.attributes["service.name"] == "debugger"'
+            - 'IsMatch(resource.attributes["service.name"], "jaeger.*")'
+            - 'IsMatch(resource.attributes["service.name"], "otel.*")'
+
+      # Extract anomaly labels from HTTP headers and add as span/metric attributes
+      attributes:
+        actions:
+          - key: anomaly.type
+            from_context: x-anomaly-type
+            action: insert
+          - key: anomaly.root_cause
+            from_context: x-anomaly-root-cause
+            action: insert
+          - key: anomaly.label
+            from_context: x-anomaly-label
+            action: insert
+          - key: anomaly.msg
+            from_context: x-anomaly-msg
+            action: insert
+          - key: anomaly.type
+            value: "none"
+            action: insert
+          - key: anomaly.label
+            value: "normal"
+            action: insert
+
+      # Resource processor to add consistent metadata
+      resource:
+        attributes:
+          - key: service.environment
+            value: "robot-shop"
+            action: upsert
+          - key: deployment.name
+            value: "robot-shop2"
+            action: upsert
+
+      # Transform processor to enrich spans with anomaly context
+      transform:
+        trace_statements:
+          - context: span
+            statements:
+              - set(attributes["anomaly.type"], attributes["http.request.header.x-anomaly-type"]) where attributes["http.request.header.x-anomaly-type"] != nil
+              - set(attributes["anomaly.root_cause"], attributes["http.request.header.x-anomaly-root-cause"]) where attributes["http.request.header.x-anomaly-root-cause"] != nil
+              - set(attributes["anomaly.label"], attributes["http.request.header.x-anomaly-label"]) where attributes["http.request.header.x-anomaly-label"] != nil
+              - set(attributes["anomaly.msg"], attributes["http.request.header.x-anomaly-msg"]) where attributes["http.request.header.x-anomaly-msg"] != nil
+              - set(attributes["anomaly.type"], "none") where attributes["anomaly.type"] == nil
+              - set(attributes["anomaly.label"], "normal") where attributes["anomaly.label"] == nil
+              - set(attributes["anomaly.root_cause"], "none") where attributes["anomaly.root_cause"] == nil
+              - set(attributes["anomaly.msg"], "baseline healthy traffic") where attributes["anomaly.msg"] == nil
+        metric_statements:
+          - context: datapoint
+            statements:
+              # Add anomaly labels to metrics
+              - set(attributes["anomaly.label"], "normal") where attributes["anomaly.label"] == nil
 
     exporters:
       otlp:
         endpoint: jaeger-collector:4317
         tls:
           insecure: true
-      
+
       logging:
         loglevel: info
+        sampling_initial: 5
+        sampling_thereafter: 200
+
+      # File exporter for labeled dataset generation
+      # Note: Without rotation, files are overwritten on each OTel collector restart
+      # For fresh files per k6 run: delete files manually or restart collector
+      file:
+        path: /var/log/otel/traces.json
+
+      # File exporter for metrics
+      file/metrics:
+        path: /var/log/otel/metrics.json
+
+      # Prometheus exporter for real-time metrics
+      prometheus:
+        endpoint: 0.0.0.0:8889
+        namespace: robotshop
+        const_labels:
+          deployment: robot-shop2
 
     service:
       pipelines:
         traces:
           receivers: [otlp]
-          processors: [memory_limiter, batch]
-          exporters: [otlp, logging]
+          processors: [memory_limiter, filter, resource, transform, batch]
+          exporters: [otlp, logging, file]
 
         metrics:
           receivers: [otlp, mysql, mongodb]
-          processors: [memory_limiter, batch]
-          exporters: [logging]
-        
+          processors: [memory_limiter, filter, resource, batch]
+          exporters: [logging, file/metrics, prometheus]
+
         logs:
           receivers: [otlp]
-          processors: [memory_limiter, batch]
+          processors: [memory_limiter, filter, resource, batch]
           exporters: [logging]

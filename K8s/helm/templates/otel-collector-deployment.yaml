@@ -25,9 +25,13 @@ spec:
           name: otlp-grpc
         - containerPort: 4318  # OTLP HTTP
           name: otlp-http
+        - containerPort: 8889  # Prometheus metrics
+          name: prometheus
         volumeMounts:
         - name: config
           mountPath: /conf
+        - name: otel-logs
+          mountPath: /var/log/otel
         resources:
           limits:
             cpu: 500m
@@ -35,6 +39,9 @@ spec:
           requests:
             cpu: 200m
             memory: 256Mi
+        env:
+        - name: GOMEMLIMIT
+          value: "400MiB"
       volumes:
       - name: config
         configMap:
@@ -42,3 +49,36 @@ spec:
           items:
           - key: otel-collector-config.yaml
             path: otel-collector-config.yaml
+      - name: otel-logs
+        persistentVolumeClaim:
+          claimName: otel-logs-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: otel-logs-pvc
+  labels:
+    app: opentelemetry-collector
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector-prometheus
+  labels:
+    app: opentelemetry-collector
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8889
+    targetPort: 8889
+    protocol: TCP
+    name: prometheus
+  selector:
+    app: opentelemetry-collector
