@@ -19,10 +19,10 @@ ls_tmp() {
   kubectl exec -n robot-shop2 -it deployments/debug-deployment -- sh -lc 'LS_COLORS= ls --color=never -lah /mnt/otel-logs/ 2>/dev/null || ls -lah /mnt/otel-logs/'
 }
 k6_tmp() {
-  local mode=${1:-simple}
-  local baseline_duration=${2:-10}
-  local duration=${3:-5}
-  local ramp_duration=${4:-5}
+  local mode=${1:-deep}
+  local baseline_duration=${2:-10s}
+  local duration=${3:-5s}
+  local ramp_duration=${4:-5s}
   local anomaly_rate=${5:-0.1}
   echo "Starting k6 load test with baseline_duration=$baseline_duration duration=$duration, ramp_duration=$ramp_duration, anomaly_rate=$anomaly_rate"
 	
@@ -69,7 +69,7 @@ case $1 in
         ls_tmp
         ;;
     k6)
-        k6_tmp "$2" "$3" "$4" "$5" 
+        k6_tmp "$2" "$3" "$4" "$5" "$6"
         ;;
     cp)
         cp_tmp

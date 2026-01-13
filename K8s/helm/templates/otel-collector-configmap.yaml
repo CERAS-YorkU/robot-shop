@@ -30,6 +30,15 @@ data:
           insecure: true
           insecure_skip_verify: true
 
+      kubeletstats:
+        auth_type: "serviceAccount"
+        collection_interval: 30s
+        endpoint: "${env:K8S_NODE_NAME}:10250"
+        insecure_skip_verify: true
+        metric_groups:
+          - pod
+          - container
+          - node
     processors:
       batch:
         timeout: 1s
@@ -39,6 +48,9 @@ data:
         check_interval: 1s
         limit_mib: 512
 
+      k8sattributes:
+        auth_type: "serviceAccount"
+        passthrough: false
       # Filter processor to exclude unwanted traces and metrics
       filter:
         traces:
@@ -152,6 +164,8 @@ data:
         namespace: robotshop
         const_labels:
           deployment: robot-shop2
+        resource_to_telemetry_conversion:
+          enabled: true
 
     service:
       pipelines:
@@ -161,8 +175,8 @@ data:
           exporters: [otlp, logging, file]
 
         metrics:
-          receivers: [otlp, mysql, mongodb]
-          processors: [memory_limiter, filter, resource, batch]
+          receivers: [otlp, mysql, mongodb, kubeletstats]
+          processors: [memory_limiter, filter, resource, k8sattributes, batch]
           exporters: [logging, file/metrics, prometheus]
 
         logs:
