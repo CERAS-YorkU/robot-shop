@@ -14,6 +14,7 @@ spec:
       labels:
         app: opentelemetry-collector
     spec:
+      serviceAccountName: otel-collector
       containers:
       - name: otel-collector
         image: otel/opentelemetry-collector-contrib:0.95.0
@@ -40,6 +41,10 @@ spec:
             cpu: 200m
             memory: 256Mi
         env:
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
         - name: GOMEMLIMIT
           value: "400MiB"
       volumes:
